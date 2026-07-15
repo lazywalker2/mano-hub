@@ -52,7 +52,7 @@ const loader = `<!DOCTYPE html>
 </head>
 <body>
 <div class="card" id="card" hidden>
-  <h1>🔒 Mano Hub</h1>
+  <h1>🔐 Mano Hub <span style="color:var(--muted);font-size:.8rem;font-weight:400">v2.3</span></h1>
   <input type="password" id="p" placeholder="Slaptažodis" autocomplete="current-password">
   <label class="rem"><input type="checkbox" id="rem" checked> Prisiminti šiame įrenginyje</label>
   <p class="err" id="err"></p>
