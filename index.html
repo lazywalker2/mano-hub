@@ -666,7 +666,7 @@
 </main>
 
 <footer>
-  <span><strong>v5.0</strong> · Duomenys sinchronizuojami per debesį realiu laiku („☁“ viršuje). Papildomas užraktas — „🔒“.</span>
+  <span><strong>v5.1</strong> · Duomenys sinchronizuojami per debesį realiu laiku („☁“ viršuje). Papildomas užraktas — „🔒“.</span>
   <button id="export-btn">Eksportuoti</button>
   <button id="import-btn">Importuoti</button>
   <input type="file" id="import-file" accept=".json" style="display:none">
@@ -676,11 +676,9 @@
 <div class="lock-back" id="auth-back">
   <div class="lock-card">
     <h3>Mano Hub</h3>
-    <input type="email" id="auth-email" placeholder="El. paštas" autocomplete="username">
-    <input type="password" id="auth-pass" placeholder="Slaptažodis" autocomplete="current-password" style="margin-top:8px">
+    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 16px">Prisijunk su savo Google paskyra</p>
+    <button class="btn" id="auth-google">Prisijungti su Google</button>
     <p class="lock-err" id="auth-err"></p>
-    <button class="btn" id="auth-login">Prisijungti</button>
-    <button class="btn secondary" id="auth-register">Registruotis</button>
   </div>
 </div>
 
@@ -2246,37 +2244,29 @@ function detachItemsListener() {
   if (unsubscribeItems) { unsubscribeItems(); unsubscribeItems = null; }
 }
 
-/* ---- Prisijungimo langas ---- */
-function authErrLt(e) {
-  const c = (e && e.code) || '';
-  if (c.includes('invalid-credential') || c.includes('wrong-password') || c.includes('user-not-found'))
-    return 'Neteisingas el. paštas arba slaptažodis';
-  if (c.includes('email-already-in-use')) return 'Šis el. paštas jau užregistruotas — spausk „Prisijungti“';
-  if (c.includes('weak-password')) return 'Slaptažodis per silpnas (bent 6 simboliai)';
-  if (c.includes('invalid-email')) return 'Neteisingas el. pašto formatas';
-  if (c.includes('network')) return 'Nėra interneto ryšio';
-  if (c.includes('too-many-requests')) return 'Per daug bandymų — palauk kelias minutes';
-  return 'Klaida: ' + ((e && e.message) || e);
-}
+/* ---- Prisijungimo langas (tik Google) ---- */
 function showAuth(show) {
   document.getElementById('auth-back').classList.toggle('locked', show);
-  if (show) document.getElementById('auth-email').focus();
 }
-async function doAuth(register) {
-  const email = document.getElementById('auth-email').value.trim();
-  const pass = document.getElementById('auth-pass').value;
+async function signInGoogle() {
   const err = document.getElementById('auth-err');
   err.textContent = '';
-  if (!email || !pass) { err.textContent = 'Įvesk el. paštą ir slaptažodį'; return; }
   try {
-    if (register) await firebase.auth().createUserWithEmailAndPassword(email, pass);
-    else await firebase.auth().signInWithEmailAndPassword(email, pass);
-    document.getElementById('auth-pass').value = '';
-  } catch (e) { err.textContent = authErrLt(e); }
+    await firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
+  } catch (e) {
+    const c = (e && e.code) || '';
+    if (c.includes('operation-not-allowed'))
+      err.textContent = 'Google prisijungimas dar neįjungtas Firebase konsolėje';
+    else if (c.includes('popup-blocked'))
+      err.textContent = 'Naršyklė užblokavo langą — leisk iškylančius langus šiai svetainei';
+    else if (c.includes('popup-closed-by-user') || c.includes('cancelled-popup-request'))
+      err.textContent = '';
+    else if (c.includes('network'))
+      err.textContent = 'Nėra interneto ryšio';
+    else err.textContent = 'Klaida: ' + ((e && e.message) || e);
+  }
 }
-document.getElementById('auth-login').addEventListener('click', () => doAuth(false));
-document.getElementById('auth-register').addEventListener('click', () => doAuth(true));
-document.getElementById('auth-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doAuth(false); });
+document.getElementById('auth-google').addEventListener('click', signInGoogle);
 
 if (fbReady) {
   firebase.auth().onAuthStateChanged(async user => {
