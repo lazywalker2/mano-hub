@@ -477,7 +477,6 @@
       <button data-view="notes">Užrašai</button>
     </nav>
     <button class="drive-chip" id="sync-chip" title="Sinchronizacija ir paskyra">☁ Sinch</button>
-    <button class="drive-chip" id="lock-chip" title="Slaptažodžio užraktas">🔒</button>
   </div>
 </header>
 
@@ -666,7 +665,7 @@
 </main>
 
 <footer>
-  <span><strong>v5.1</strong> · Duomenys sinchronizuojami per debesį realiu laiku („☁“ viršuje). Papildomas užraktas — „🔒“.</span>
+  <span><strong>v5.2</strong> · Duomenys sinchronizuojami per debesį realiu laiku („☁“ viršuje).</span>
   <button id="export-btn">Eksportuoti</button>
   <button id="import-btn">Importuoti</button>
   <input type="file" id="import-file" accept=".json" style="display:none">
@@ -682,15 +681,6 @@
   </div>
 </div>
 
-<!-- ============ UŽRAKTAS ============ -->
-<div class="lock-back" id="lock-back">
-  <div class="lock-card">
-    <h3>🔒 Mano Hub</h3>
-    <input type="password" id="lock-pass" placeholder="Slaptažodis" autocomplete="off">
-    <p class="lock-err" id="lock-err"></p>
-    <button class="btn" id="lock-open">Atrakinti</button>
-  </div>
-</div>
 
 <!-- ============ MODAL ============ -->
 <div class="modal-back" id="modal-back">
@@ -733,7 +723,7 @@ const store = {
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 /* Firebase sinchronizacijos būsena (funkcijos — skripto apačioje) */
-const SYNC_KEYS = ['hub.boards', 'hub.mind', 'hub.library', 'hub.scamper', 'hub.notes', 'hub.lockHash'];
+const SYNC_KEYS = ['hub.boards', 'hub.mind', 'hub.library', 'hub.scamper', 'hub.notes'];
 let applyingRemote = false;
 let fbUser = null;
 let db = null, fbReady = false;
@@ -2072,9 +2062,6 @@ async function pushKey(key) {
   } else if (key === 'hub.scamper') {
     await itemsCol().doc('misc_scamper').set({
       kind: 'scamper', updated: stampOf(key), data: JSON.parse(JSON.stringify(bsSessions)) });
-  } else if (key === 'hub.lockHash') {
-    await itemsCol().doc('misc_settings').set({
-      kind: 'settings', updated: stampOf(key), data: { lockHash: store.get('hub.lockHash', '') } });
   }
 }
 
@@ -2154,7 +2141,6 @@ async function initialSync() {
       bsSessions.forEach(s => { if (!s.tech) s.tech = 'scamper'; });
       store.set('hub.scamper', bsSessions);
     });
-    mergeMisc('misc_settings', 'hub.lockHash', d => store.set('hub.lockHash', (d && d.lockHash) || ''));
   } finally { applyingRemote = false; }
   rerenderAll();
   if (syncDirty.size) schedulePush();
@@ -2202,9 +2188,6 @@ function applyRemoteDoc(type, docId, doc) {
     bsSessions = doc.data || [];
     bsSessions.forEach(s => { if (!s.tech) s.tech = 'scamper'; });
     store.set('hub.scamper', bsSessions); return 'hub.scamper';
-  }
-  if (docId === 'misc_settings' && (doc.updated || 0) > stampOf('hub.lockHash')) {
-    store.set('hub.lockHash', (doc.data && doc.data.lockHash) || ''); return 'hub.lockHash';
   }
   return null;
 }
@@ -2313,74 +2296,6 @@ syncChip.addEventListener('click', () => {
   });
 });
 setSyncStatus('off');
-
-/* ================= SLAPTAŽODŽIO UŽRAKTAS ================= */
-async function hashPass(p) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('hub:' + p));
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-const lockBack = document.getElementById('lock-back');
-const lockHash = () => store.get('hub.lockHash', '');
-
-function showLockIfNeeded() {
-  let unlocked = '';
-  try { unlocked = sessionStorage.getItem('hub.unlocked') || ''; } catch {}
-  if (lockHash() && unlocked !== lockHash()) {
-    lockBack.classList.add('locked');
-    document.getElementById('lock-pass').focus();
-  }
-}
-async function tryUnlock() {
-  const input = document.getElementById('lock-pass');
-  if (await hashPass(input.value) === lockHash()) {
-    try { sessionStorage.setItem('hub.unlocked', lockHash()); } catch {}
-    lockBack.classList.remove('locked');
-    input.value = '';
-    document.getElementById('lock-err').textContent = '';
-  } else {
-    document.getElementById('lock-err').textContent = 'Neteisingas slaptažodis';
-    input.select();
-  }
-}
-document.getElementById('lock-open').addEventListener('click', tryUnlock);
-document.getElementById('lock-pass').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
-
-document.getElementById('lock-chip').addEventListener('click', () => {
-  const has = !!lockHash();
-  openModal({
-    title: has ? 'Keisti užraktą' : 'Nustatyti slaptažodį',
-    bodyHTML: `
-      ${has ? '<label class="field">Dabartinis slaptažodis</label><input type="password" id="f-lock-cur" autocomplete="off">' : ''}
-      <label class="field">Naujas slaptažodis${has ? ' (palik tuščią — užraktas bus pašalintas)' : ''}</label>
-      <input type="password" id="f-lock-new" autocomplete="off">
-      <p style="margin:10px 0 0;color:var(--muted);font-size:0.8rem;line-height:1.5">
-        Užraktas apsaugo nuo pašalinių prie tavo įrenginio ir per Drive galioja visuose įrenginiuose.
-        Tikroji duomenų apsauga — tavo Google paskyra: be jos Drive duomenys nepasiekiami.</p>`,
-    actions: [
-      { label: 'Atšaukti', style: 'secondary', onClick() {} },
-      { label: 'Išsaugoti', onClick() {
-        (async () => {
-          if (has) {
-            const cur = document.getElementById('f-lock-cur').value;
-            if (await hashPass(cur) !== lockHash()) { toast('Dabartinis slaptažodis neteisingas.'); return; }
-          }
-          const nv = document.getElementById('f-lock-new').value;
-          if (!nv) {
-            store.set('hub.lockHash', '');
-            toast(has ? 'Užraktas pašalintas.' : 'Slaptažodis neįvestas — užraktas nenustatytas.');
-          } else {
-            store.set('hub.lockHash', await hashPass(nv));
-            try { sessionStorage.setItem('hub.unlocked', lockHash()); } catch {}
-            toast('Užraktas nustatytas. Jis galios ir kituose įrenginiuose po sinchronizacijos.');
-          }
-          closeModal();
-        })();
-        return false; // modalas uždaromas tik sėkmės atveju (aukščiau)
-      }}
-    ]
-  });
-});
-showLockIfNeeded();
 
 /* ================= Pradinis skyrius ================= */
 const savedView = store.get('hub.view', 'kanban');
