@@ -665,18 +665,19 @@
 </main>
 
 <footer>
-  <span><strong>v5.2</strong> · Duomenys sinchronizuojami per debesį realiu laiku („☁“ viršuje).</span>
+  <span><strong>v5.3</strong> · Duomenys sinchronizuojami per debesį realiu laiku („☁“ viršuje).</span>
   <button id="export-btn">Eksportuoti</button>
   <button id="import-btn">Importuoti</button>
   <input type="file" id="import-file" accept=".json" style="display:none">
 </footer>
 
-<!-- ============ PRISIJUNGIMAS ============ -->
-<div class="lock-back" id="auth-back">
+<!-- ============ PRISIJUNGIMAS (rodomas iškart, nuimamas tik prisijungus) ============ -->
+<div class="lock-back locked" id="auth-back">
   <div class="lock-card">
     <h3>Mano Hub</h3>
-    <p style="color:var(--muted);font-size:0.85rem;margin:0 0 16px">Prisijunk su savo Google paskyra</p>
-    <button class="btn" id="auth-google">Prisijungti su Google</button>
+    <p id="auth-loading" style="color:var(--muted);font-size:0.85rem;margin:0">Tikrinama paskyra…</p>
+    <p id="auth-sub" hidden style="color:var(--muted);font-size:0.85rem;margin:0 0 16px">Prisijunk su savo Google paskyra</p>
+    <button class="btn" id="auth-google" hidden>Prisijungti su Google</button>
     <p class="lock-err" id="auth-err"></p>
   </div>
 </div>
@@ -2231,6 +2232,21 @@ function detachItemsListener() {
 function showAuth(show) {
   document.getElementById('auth-back').classList.toggle('locked', show);
 }
+// „Tikrinama paskyra…“ keičiama į Google mygtuką, kai žinoma prisijungimo būsena
+let authUiReady = false;
+function revealAuthUI(errMsg) {
+  if (!authUiReady) {
+    authUiReady = true;
+    document.getElementById('auth-loading').hidden = true;
+    document.getElementById('auth-sub').hidden = false;
+    document.getElementById('auth-google').hidden = false;
+  }
+  if (errMsg) document.getElementById('auth-err').textContent = errMsg;
+}
+// apsauga: jei Firebase per 8 s neatsako, vis tiek parodom mygtuką
+setTimeout(() => {
+  if (!authUiReady) revealAuthUI('Serveris ilgai neatsako — patikrink interneto ryšį');
+}, 8000);
 async function signInGoogle() {
   const err = document.getElementById('auth-err');
   err.textContent = '';
@@ -2254,6 +2270,7 @@ document.getElementById('auth-google').addEventListener('click', signInGoogle);
 if (fbReady) {
   firebase.auth().onAuthStateChanged(async user => {
     fbUser = user;
+    revealAuthUI();
     if (!user) {
       detachItemsListener();
       setSyncStatus('off');
@@ -2273,6 +2290,7 @@ if (fbReady) {
   });
 } else {
   setSyncStatus('error');
+  revealAuthUI('Nepavyko pasiekti serverio — patikrink interneto ryšį ir perkrauk');
 }
 
 syncChip.addEventListener('click', () => {
